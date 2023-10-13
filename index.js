@@ -11,8 +11,8 @@ const port = 8000
 https
     .createServer(
         {
-            key: fs.readFileSync('/key.pem'),
-            cert: fs.readFileSync('/cert.pem'),
+            key: fs.readFileSync('./key.pem'),
+            cert: fs.readFileSync('./cert.pem'),
         },
         app
     )
