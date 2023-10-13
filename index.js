@@ -1,12 +1,32 @@
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const cors = require('cors');
+const https = require('https');
+const fs = require('fs');
+const app = express()
+
+const host = '45.140.179.236'
+const port = 8000
+
+https
+    .createServer(
+        {
+            key: fs.readFileSync('/key.pem'),
+            cert: fs.readFileSync('/cert.pem'),
+        },
+        app
+    )
+    .listen(port, host, function () {
+        console.log(
+            `Server listens https://${host}:${port}`
+        );
+    });
 
 const token = '6476733091:AAGjoUeCRXN8GIQT8jMwvZkxYaXfVsWUxUk';
 const webAppUrl = 'https://silly-bubblegum-7266f3.netlify.app'
 
 const bot = new TelegramBot(token, {polling: true});
-const app = express()
+
 
 
 app.use(express.json())
@@ -55,10 +75,6 @@ bot.on('message', async (msg) => {
 app.post('/web-data', async (req, res) => {
     const {queryId, products = [], totalPrice} = req.body
 
-    // const quantityAndProducts = (products) => {
-    //
-    // }
-
     try {
         await bot.answerWebAppQuery(queryId, {
             type: 'article',
@@ -70,13 +86,6 @@ app.post('/web-data', async (req, res) => {
         })
         return res.status(200).json({})
     } catch (e) {
-
-        // await bot.answerWebAppQuery(queryId, {
-        //     type: 'article',
-        //     id: queryId,
-        //     title: 'Не удалось приобрести товар',
-        //     input_message_content: {message_text: 'Не удалось совершить покупку'}
-        // })
         return res.status(500).json({})
     }
 } )
