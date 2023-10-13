@@ -39,6 +39,8 @@ bot.on('message', async (msg) => {
             const data = JSON.parse(msg?.web_app_data?.data)
 
             await bot.sendMessage(chatId, 'Спасибо за обратную связь!')
+            await bot.sendMessage(chatId, 'Ваше имя: ' + data?.fio)
+            await bot.sendMessage(chatId, 'Ваш номер телефона: ' + data?.number)
             await bot.sendMessage(chatId, 'Ваш город: ' + data?.city)
             await bot.sendMessage(chatId, 'Ваша улица: ' + data?.street)
 
