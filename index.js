@@ -8,19 +8,9 @@ const app = express()
 const host = '45.140.179.236'
 const port = 8000
 
-https
-    .createServer(
-        {
-            key: fs.readFileSync('./key.pem'),
-            cert: fs.readFileSync('./cert.pem'),
-        },
-        app
-    )
-    .listen(port, host, function () {
-        console.log(
-            `Server listens https://${host}:${port}`
-        );
-    });
+
+
+
 
 const token = '6476733091:AAGjoUeCRXN8GIQT8jMwvZkxYaXfVsWUxUk';
 const webAppUrl = 'https://silly-bubblegum-7266f3.netlify.app'
@@ -72,6 +62,13 @@ bot.on('message', async (msg) => {
     }
 });
 
+https
+    .createServer(
+        {
+            key: fs.readFileSync('./key.pem'),
+            cert: fs.readFileSync('./cert.pem'),
+        },
+
 app.post('/web-data', async (req, res) => {
     const {queryId, products = [], totalPrice} = req.body
 
@@ -88,8 +85,13 @@ app.post('/web-data', async (req, res) => {
     } catch (e) {
         return res.status(500).json({})
     }
-} )
+}))
+    .listen(port, host, function () {
+        console.log(
+            `Server listens https://${host}:${port}`
+        );
+    });
 
-const PORT = 8000
-
-app.listen(PORT, ()=> console.log('server started on PORT ' + PORT))
+// const PORT = 8000
+//
+// app.listen(PORT, ()=> console.log('server started on PORT ' + PORT))
