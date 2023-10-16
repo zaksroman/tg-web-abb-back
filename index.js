@@ -75,19 +75,19 @@ app.post('/web-data', async (req, res) => {
     }
 })
 
-https
-    .createServer(
-        {
-            key: fs.readFileSync('./key.pem'),
-            cert: fs.readFileSync('./cert.pem'),
-        },
-    app
-    )
-    .listen(port, host, function () {
-        console.log(
-            `Server listens https://${host}:${port}`
-        );
-    });
-// const PORT = 8000
+// https
+//     .createServer(
+//         {
+//             key: fs.readFileSync('./key.pem'),
+//             cert: fs.readFileSync('./cert.pem'),
+//         },
+//     app
+//     )
+//     .listen(port, host, function () {
+//         console.log(
+//             `Server listens https://${host}:${port}`
+//         );
+//     });
+const PORT = 8000
 //
-// app.listen(PORT, ()=> console.log('server started on PORT ' + PORT))
+app.listen(PORT, ()=> console.log('server started on PORT ' + PORT))
