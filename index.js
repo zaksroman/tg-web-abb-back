@@ -23,7 +23,7 @@ bot.on('message', async (msg) => {
     if (text === '/start') {
         await bot.sendMessage(chatId, 'Ниже появятся кнопка, заполни форму', {
             reply_markup: {
-                inline_keyboard: [
+                InlineKeyboardButton: [
                     [{text: 'Заполни форму', web_app: {url: webAppUrl + '/form'}}]
                 ]
             }
