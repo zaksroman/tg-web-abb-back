@@ -5,8 +5,8 @@ const https = require('https');
 const fs = require('fs');
 const app = express()
 
-const host = '45.140.179.236'
-const port = 8000
+const HOST = '45.140.179.236'
+const PORT = 8000
 
 const token = '6476733091:AAGjoUeCRXN8GIQT8jMwvZkxYaXfVsWUxUk';
 const webAppUrl = 'https://silly-bubblegum-7266f3.netlify.app'
@@ -23,19 +23,19 @@ bot.on('message', async (msg) => {
     if (text === '/start') {
         await bot.sendMessage(chatId, 'Ниже появятся кнопка, заполни форму', {
             reply_markup: {
-                keyboard: [
+                inline_keyboard: [
                     [{text: 'Заполни форму', web_app: {url: webAppUrl + '/form'}}]
                 ]
             }
         })
 
-        await bot.sendMessage(chatId, 'Заходи в наш интернет магазин по кнопке ниже', {
-            reply_markup: {
-                inline_keyboard: [
-                    [{text: 'Сделать заказ', web_app: {url: webAppUrl}}]
-                ]
-            }
-        })
+        // await bot.sendMessage(chatId, 'Заходи в наш интернет магазин по кнопке ниже', {
+        //     reply_markup: {
+        //         inline_keyboard: [
+        //             [{text: 'Сделать заказ', web_app: {url: webAppUrl}}]
+        //         ]
+        //     }
+        // })
     }
 
     if (msg?.web_app_data?.data) {
@@ -85,9 +85,8 @@ app.post('/web-data', async (req, res) => {
 //     )
 //     .listen(port, host, function () {
 //         console.log(
-//             `Server listens https://${host}:${port}`
+//             `Server listens https://${HOST}:${PORT}`
 //         );
 //     });
-const PORT = 8000
-//
+
 app.listen(PORT, ()=> console.log('server started on PORT ' + PORT))
