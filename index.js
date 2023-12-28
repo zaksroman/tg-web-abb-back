@@ -38,7 +38,6 @@ bot.on('message', async (msg) => {
 
         await bot.sendMessage(botChatId, 'Нажмите на кнопку справа в поле ввода, чтоб вызвать магазин или начать набор текста')
 
-
         if (!userToTopic.find(el => el.id === msg.from.id)) {
 
             const newTopic = `${msg.from.first_name} ${msg.from.last_name} @${msg.from.username} User_ID:${userId}`
@@ -58,20 +57,9 @@ bot.on('message', async (msg) => {
     /// user message //////////
     if (msg.chat?.id !== forumChatId && !msg.from.is_bot && text !== '/start') {
         try {
-            if (!!msg.reply_to_message?.message_id) {
-                const replyMsg = userBD?.find(el => el.messages.userMsg === msg.reply_to_message.message_id)
-                const copiedMsg = await bot.copyMessage(forumChatId, botChatId, msg.message_id, {
-                    message_thread_id: userBD?.message_thread_id,
-                    reply_to_message_id: replyMsg?.messages.adminMsg
-                })
-                userBD?.messages.push({userMsg: msg.message_id, botMsg: copiedMsg.message_id})
-            }
-            else {
-                const copiedMsg = await bot.copyMessage(forumChatId, botChatId, msg.message_id, {
-                    message_thread_id: userBD?.message_thread_id
-                })
-                userBD?.messages.push({userMsg: msg.message_id, botMsg: copiedMsg.message_id})
-            }
+            await bot.copyMessage(forumChatId, botChatId, msg.message_id, {
+                message_thread_id: userBD?.message_thread_id
+            })
         } catch (e) {
             console.error(e)
         }
@@ -80,12 +68,7 @@ bot.on('message', async (msg) => {
     /// admin message ////////
     if ( msg.chat?.id === forumChatId && !!msg.message_thread_id === true && !msg.from.is_bot ) {
         try {
-            if (!!msg.reply_to_message.message_id) {
-                // ToDo: обработка reply-сообщений от админа
-            } else {
-                const copiedMsg = await bot.copyMessage(userBD?.chatId, forumChatId, msg.message_id)
-                userBD?.messages.push({adminMsg: msg.message_id, botMsg: copiedMsg.message_id})
-            }
+            await bot.copyMessage(userBD?.chatId, forumChatId, msg.message_id)
         }
         catch (e) {
             console.error(e)
