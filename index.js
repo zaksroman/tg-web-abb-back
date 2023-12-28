@@ -1,92 +1,116 @@
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const cors = require('cors');
-const https = require('https');
-const fs = require('fs');
 const app = express()
 
-const HOST = '45.140.179.236'
 const PORT = 8000
+const forumChatId = -1002105194325
+const supportChatId = '379906514'
 
 const token = '6476733091:AAGjoUeCRXN8GIQT8jMwvZkxYaXfVsWUxUk';
 const webAppUrl = 'https://silly-bubblegum-7266f3.netlify.app'
 
 const bot = new TelegramBot(token, {polling: true});
+const userToTopic = []
 
 app.use(express.json())
 app.use(cors())
 
 bot.on('message', async (msg) => {
-    const chatId = msg.chat.id;
+    const botChatId = msg.chat.id;
     const text = msg.text
+    const userId = msg.from.id;
+    const userName = `${msg.from.first_name} ${msg.from.last_name}` || msg.from.username ||  `User_${userId}`;
+    const userBD = msg.message_thread_id
+        ? userToTopic.find(el => el.message_thread_id === msg.message_thread_id)
+        : userToTopic.find(el => el.id === userId)
 
     if (text === '/start') {
-        await bot.sendMessage(chatId, 'Ниже появятся кнопка, заполни форму', {
+        await bot.sendMessage(botChatId, 'Добро пожаловать в магазин)', {
             reply_markup: {
-                inline_keyboard: [
-                    [{text: 'Заполни форму', web_app: {url: webAppUrl + '/form'}}]
-                ]
+                keyboard: [
+                    [{text: 'Магазин', web_app: {url: webAppUrl}}]
+                ],
+                resize_keyboard: true,
+                one_time_keyboard: false
             }
         })
 
-        // await bot.sendMessage(chatId, 'Заходи в наш интернет магазин по кнопке ниже', {
-        //     reply_markup: {
-        //         inline_keyboard: [
-        //             [{text: 'Сделать заказ', web_app: {url: webAppUrl}}]
-        //         ]
-        //     }
-        // })
+        await bot.sendMessage(botChatId, 'Нажмите на кнопку справа в поле ввода, чтоб вызвать магазин или начать набор текста')
+
+
+        if (!userToTopic.find(el => el.id === msg.from.id)) {
+
+            const newTopic = `${msg.from.first_name} ${msg.from.last_name} @${msg.from.username} User_ID:${userId}`
+            const topicId = await bot.createForumTopic(forumChatId, userName)
+            await bot.sendMessage(forumChatId,  newTopic, {message_thread_id: topicId.message_thread_id})
+
+            const user = {
+                id: msg.from.id,
+                chatId: msg.chat.id,
+                message_thread_id: topicId.message_thread_id,
+                messages: []
+            }
+            userToTopic.push(user)
+        }
     }
 
+    /// user message //////////
+    if (msg.chat?.id !== forumChatId && !msg.from.is_bot && text !== '/start') {
+        try {
+            if (!!msg.reply_to_message?.message_id) {
+                const replyMsg = userBD?.find(el => el.messages.userMsg === msg.reply_to_message.message_id)
+                const copiedMsg = await bot.copyMessage(forumChatId, botChatId, msg.message_id, {
+                    message_thread_id: userBD?.message_thread_id,
+                    reply_to_message_id: replyMsg?.messages.adminMsg
+                })
+                userBD?.messages.push({userMsg: msg.message_id, botMsg: copiedMsg.message_id})
+            }
+            else {
+                const copiedMsg = await bot.copyMessage(forumChatId, botChatId, msg.message_id, {
+                    message_thread_id: userBD?.message_thread_id
+                })
+                userBD?.messages.push({userMsg: msg.message_id, botMsg: copiedMsg.message_id})
+            }
+        } catch (e) {
+            console.error(e)
+        }
+    }
+
+    /// admin message ////////
+    if ( msg.chat?.id === forumChatId && !!msg.message_thread_id === true && !msg.from.is_bot ) {
+        try {
+            if (!!msg.reply_to_message.message_id) {
+                // ToDo: обработка reply-сообщений от админа
+            } else {
+                const copiedMsg = await bot.copyMessage(userBD?.chatId, forumChatId, msg.message_id)
+                userBD?.messages.push({adminMsg: msg.message_id, botMsg: copiedMsg.message_id})
+            }
+        }
+        catch (e) {
+            console.error(e)
+        }
+    }
+
+    /// обработка данных заказа
     if (msg?.web_app_data?.data) {
         try {
             const data = JSON.parse(msg?.web_app_data?.data)
-
-            await bot.sendMessage(chatId, 'Спасибо за обратную связь!')
-            await bot.sendMessage(chatId, 'Ваше имя: ' + data?.fio)
-            await bot.sendMessage(chatId, 'Ваш номер телефона: ' + data?.number)
-            await bot.sendMessage(chatId, 'Ваш город: ' + data?.city)
-            await bot.sendMessage(chatId, 'Ваша улица: ' + data?.street)
+            await bot.sendMessage(botChatId, 'Список ваших товаров и ваши данные TEST')
+            // await bot.sendMessage(chatId, 'Ваше имя: ' + data?.fio)
 
             setTimeout(async ()=> {
-                await bot.sendMessage(chatId,'Всю информацию вы получите в этом чате')
-            }, 2000)
+                await bot.sendMessage(botChatId,'Всю информацию вы получите в этом чате')
+            }, 500)
         } catch (e) {
         }
     }
 });
 
-
-app.post('/web-data', async (req, res) => {
-    const {queryId, products = [], totalPrice} = req.body
-
-    try {
-        await bot.answerWebAppQuery(queryId, {
-            type: 'article',
-            id: queryId,
-            title: 'Успешная покупка',
-            input_message_content: {
-                message_text: `Поздравяю с успешной покупкой, вы купили на сумму ${totalPrice}, ${products.map(item => item.title).join(', ')} `
-            }
-        })
-        return res.status(200).json({})
-    } catch (e) {
-        return res.status(500).json({})
-    }
-})
-
-// https
-//     .createServer(
-//         {
-//             key: fs.readFileSync('./key.pem'),
-//             cert: fs.readFileSync('./cert.pem'),
-//         },
-//     app
-//     )
-//     .listen(port, host, function () {
-//         console.log(
-//             `Server listens https://${HOST}:${PORT}`
-//         );
-//     });
-
 app.listen(PORT, ()=> console.log('server started on PORT ' + PORT))
+
+
+
+
+
+
