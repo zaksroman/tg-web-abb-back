@@ -2,76 +2,139 @@ const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const cors = require('cors');
 const app = express()
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema
 
 const PORT = 8000
-const forumChatId = -1002105194325
-const supportChatId = '379906514'
 
+/////variables////
+const forumChatId = -1002105194325
 const token = '6476733091:AAGjoUeCRXN8GIQT8jMwvZkxYaXfVsWUxUk';
 const webAppUrl = 'https://silly-bubblegum-7266f3.netlify.app'
+const db = 'mongodb://localhost:27017/learnBD'
+/////////////////
 
 const bot = new TelegramBot(token, {polling: true});
-const userToTopic = []
+
+mongoose
+    .connect(db)
+    .then(() => {
+    console.log('Подключение к MongoDB успешно!');
+}).catch((error) => {
+    console.error('Ошибка подключения к MongoDB:', error);
+});
+
+const userDataSchema
+    = new Schema({
+    fromId: {
+        type: Number,
+        require: true
+    },
+    chatId: {
+        type: Number,
+        require: true
+    },
+    message_thread_id: {
+        type: Number,
+        require: true
+    },
+    messages: {
+        type: Array,
+        require: true
+    },
+})
+
+const userDataModel = mongoose.model('userDataModel', userDataSchema, 'pair_userbot_messages')
 
 app.use(express.json())
 app.use(cors())
 
+//////////MESSAGE///
 bot.on('message', async (msg) => {
     const botChatId = msg.chat.id;
     const text = msg.text
     const userId = msg.from.id;
     const userName = `${msg.from.first_name} ${msg.from.last_name}` || msg.from.username ||  `User_${userId}`;
+
     const userBD = msg.message_thread_id
-        ? userToTopic.find(el => el.message_thread_id === msg.message_thread_id)
-        : userToTopic.find(el => el.id === userId)
+        ? await userDataModel.findOne({message_thread_id: msg.message_thread_id})
+        : await userDataModel.findOne({fromId: userId})
 
-    if (text === '/start') {
-        await bot.sendMessage(botChatId, 'Добро пожаловать в магазин)', {
-            reply_markup: {
-                keyboard: [
-                    [{text: 'Магазин', web_app: {url: webAppUrl}}]
-                ],
-                resize_keyboard: true,
-                one_time_keyboard: false
+    try {
+        if (text === '/start') {
+            const sendWelcome = await bot.sendMessage(botChatId, 'Добро пожаловать в магазин)', {
+                reply_markup: {
+                    keyboard: [
+                        [{text: 'Магазин', web_app: {url: webAppUrl}}]
+                    ],
+                    resize_keyboard: true,
+                    one_time_keyboard: false
+                }
+            })
+
+            const sendInstruction = await bot.sendMessage(botChatId, 'Нажмите на кнопку справа в поле ввода, чтоб вызвать магазин или начать набор текста')
+
+            const existingUserData = await userDataModel.findOne({ fromId: msg.from.id });
+            if (!existingUserData) {
+                const newTopic = `${msg.from.first_name} ${msg.from.last_name} @${msg.from.username} User_ID:${userId}`
+                const topicId = await bot.createForumTopic(forumChatId, userName)
+                await bot.sendMessage(forumChatId, newTopic, {message_thread_id: topicId.message_thread_id})
+
+                const newUserData = new userDataModel({
+                    fromId: msg.from.id,
+                    chatId: msg.chat?.id,
+                    message_thread_id: topicId.message_thread_id,
+                    messages: []
+                })
+
+                await newUserData
+                    .save()
+                    .catch((error) => {
+                    console.error('Ошибка при сохранении данных:', error);
+                });
+
+                await userDataModel.findOneAndUpdate(
+                    {fromId: msg.from.id},
+                    {$push: {messages: {$each: [
+                                    {botMsg: sendWelcome.message_id},
+                                    {botMsg: sendInstruction.message_id}
+                                ]}}}
+                )
             }
-        })
-
-        await bot.sendMessage(botChatId, 'Нажмите на кнопку справа в поле ввода, чтоб вызвать магазин или начать набор текста')
-
-
-        if (!userToTopic.find(el => el.id === msg.from.id)) {
-
-            const newTopic = `${msg.from.first_name} ${msg.from.last_name} @${msg.from.username} User_ID:${userId}`
-            const topicId = await bot.createForumTopic(forumChatId, userName)
-            await bot.sendMessage(forumChatId,  newTopic, {message_thread_id: topicId.message_thread_id})
-
-            const user = {
-                id: msg.from.id,
-                chatId: msg.chat.id,
-                message_thread_id: topicId.message_thread_id,
-                messages: []
-            }
-            userToTopic.push(user)
+        }
+    } catch (error) {
+        if (error.response && error.response.statusCode === 403) {
+            console.log(`Не удалось отправить сообщение. Пользователь заблокировал бота.`);
+        } else {
+            console.error(error)
         }
     }
 
+    const findPair = async (msg) =>{
+        if (msg.reply_to_message?.from?.is_bot === true) {
+            return await userBD?.messages?.find(el => el.botMsg === msg?.reply_to_message?.message_id).msg
+        } else {
+            return await userBD?.messages?.find(el => el.msg === msg?.reply_to_message?.message_id).botMsg
+        }
+    }
+
+    const copyMessageToChat = async (userBD, fromChatId, toChatId, msg ) => {
+        const copiedMsg = await bot.copyMessage(toChatId, fromChatId, msg.message_id, {
+            message_thread_id: msg?.chat?.id !== forumChatId && userBD?.message_thread_id,
+            reply_to_message_id:
+                (msg?.reply_to_message?.message_id && msg?.reply_to_message?.message_id !== msg?.message_thread_id)
+                && await findPair(msg)
+        })
+        await userDataModel.findOneAndUpdate(
+            {fromId: userBD.fromId},
+            {$push: {messages: {msg: msg.message_id, botMsg: copiedMsg.message_id}}}
+        )
+    }
+
     /// user message //////////
-    if (msg.chat?.id !== forumChatId && !msg.from.is_bot && text !== '/start') {
+    if (msg.chat?.id !== forumChatId && !msg.from?.is_bot && text !== '/start' ) {
         try {
-            if (!!msg.reply_to_message?.message_id) {
-                const replyMsg = userBD?.find(el => el.messages.userMsg === msg.reply_to_message.message_id)
-                const copiedMsg = await bot.copyMessage(forumChatId, botChatId, msg.message_id, {
-                    message_thread_id: userBD?.message_thread_id,
-                    reply_to_message_id: replyMsg?.messages.adminMsg
-                })
-                userBD?.messages.push({userMsg: msg.message_id, botMsg: copiedMsg.message_id})
-            }
-            else {
-                const copiedMsg = await bot.copyMessage(forumChatId, botChatId, msg.message_id, {
-                    message_thread_id: userBD?.message_thread_id
-                })
-                userBD?.messages.push({userMsg: msg.message_id, botMsg: copiedMsg.message_id})
-            }
+            await copyMessageToChat(userBD, botChatId, forumChatId, msg)
         } catch (e) {
             console.error(e)
         }
@@ -80,24 +143,17 @@ bot.on('message', async (msg) => {
     /// admin message ////////
     if ( msg.chat?.id === forumChatId && !!msg.message_thread_id === true && !msg.from.is_bot ) {
         try {
-            if (!!msg.reply_to_message.message_id) {
-                // ToDo: обработка reply-сообщений от админа
-            } else {
-                const copiedMsg = await bot.copyMessage(userBD?.chatId, forumChatId, msg.message_id)
-                userBD?.messages.push({adminMsg: msg.message_id, botMsg: copiedMsg.message_id})
-            }
-        }
-        catch (e) {
+            await copyMessageToChat(userBD, forumChatId, userBD?.chatId, msg)
+        } catch (e) {
             console.error(e)
         }
     }
 
-    /// обработка данных заказа
+    /// buy data
     if (msg?.web_app_data?.data) {
         try {
             const data = JSON.parse(msg?.web_app_data?.data)
-            await bot.sendMessage(botChatId, 'Список ваших товаров и ваши данные TEST')
-            // await bot.sendMessage(chatId, 'Ваше имя: ' + data?.fio)
+            await bot.sendMessage(botChatId, 'Список ваших покупочек TEST')
 
             setTimeout(async ()=> {
                 await bot.sendMessage(botChatId,'Всю информацию вы получите в этом чате')
@@ -106,6 +162,132 @@ bot.on('message', async (msg) => {
         }
     }
 });
+
+/////////EDITMESSAGE/////////
+bot.on('edited_message', async (editedMsg) => {
+    if (editedMsg.from?.is_bot !== true) {
+        const userId = editedMsg.from.id;
+
+        const userBD = editedMsg.message_thread_id
+            ? await userDataModel.findOne({message_thread_id: editedMsg.message_thread_id})
+            : await userDataModel.findOne({fromId: userId})
+
+        const findPairToEdit = async (editedMsg) =>{
+            return await userBD?.messages?.find(el => el.msg === editedMsg?.message_id).botMsg
+        }
+
+        const editMessageText = async (editedMsg, chatId) => {
+            await  bot.editMessageText(editedMsg?.text, {
+                message_id: await findPairToEdit(editedMsg),
+                chat_id: chatId
+            })
+        }
+
+        const editMessageCaption = async (editedMsg, chatId) => {
+            await bot.editMessageCaption(editedMsg?.caption ,{
+                message_id: await findPairToEdit(editedMsg),
+                chat_id: chatId
+            })
+        }
+
+        const editMessageMedia = async (editedMsg, chatId) => {
+            const mediaType = editedMsg.media_group_id ? editedMsg.media_group_id.split('_')[0]
+                : editedMsg.document ? 'document'
+                    : editedMsg.photo ? 'photo'
+                        : editedMsg.video ? 'video'
+                            : editedMsg.animation ? 'animation'
+                                : editedMsg.audio ? 'audio'
+                                    : null
+            console.log(mediaType)
+
+            const media = editedMsg[mediaType];
+            console.log(media)
+
+            const mediaParams = { type: mediaType, media: media };
+            console.log(mediaParams)
+
+            await bot.editMessageMedia(mediaParams, {
+                message_id: await findPairToEdit(editedMsg),
+                chatId: chatId
+            });
+        }
+
+
+        /// admin message ///
+        try {
+            if (editedMsg?.chat?.id === forumChatId && !!editedMsg?.message_thread_id === true && !editedMsg?.from?.is_bot) {
+
+                if (editedMsg?.text) {
+                    await editMessageText(editedMsg, userBD?.chatId)
+                }
+
+                if (editedMsg?.caption) {
+                    await editMessageCaption(editedMsg, userBD?.chatId)
+                }
+
+                if (editedMsg?.photo || editedMsg?.video || editedMsg?.animation || editedMsg?.audio || editedMsg?.document) {
+                    await editMessageMedia(editedMsg, userBD?.chatId)
+                }
+            }
+        } catch (e) {
+            console.log(e)
+        }
+
+        /// user message //////////
+        try {
+            if (editedMsg.chat?.id !== forumChatId && !editedMsg.from?.is_bot) {
+
+                if (editedMsg?.text) {
+                    await editMessageText(editedMsg, forumChatId)
+                }
+
+                if (editedMsg?.caption) {
+                    await editMessageCaption(editedMsg, forumChatId)
+                }
+
+                if (editedMsg?.media) {
+                    await editMessageMedia(editedMsg, forumChatId)
+                }
+            }
+        } catch (e) {
+            console.log(e)
+        }
+    }
+})
+
+// /////////DELETEMESSAGE/////////
+// bot.on('delete_message', (deletedMsg) => {
+//     if (!deletedMsg.from?.is_bot) {
+//         const userId = deletedMsg?.from.id;
+//
+//         const userBD = deletedMsg.message_thread_id
+//               ? await userDataModel.findOne({message_thread_id: deletedMsg.message_thread_id})
+//               : await userDataModel.findOne({fromId: userId})
+//
+//         console.log('удалено');
+//
+//         const findPairToDelete = async (deletedMsg) => {
+//             return await userBD?.messages?.find(el => el.msg === deletedMsg?.message_id).botMsg;
+//         };
+//
+//         const deleteMsg = (chat_id, deletedMsg) => {
+//             const messageIdToDelete = findPairToDelete(deletedMsg);
+//             if (messageIdToDelete) {
+//                 bot.deleteMessage(chat_id, messageIdToDelete).catch((e) => console.log(e));
+//             }
+//         };
+//
+//         ///admin delete///
+//         if (deletedMsg?.chat?.id === forumChatId && !!deletedMsg?.message_thread_id === true && !deletedMsg?.from?.is_bot) {
+//             deleteMsg(userBD?.chatId, deletedMsg);
+//         }
+//
+//         //user delete///
+//         if (deletedMsg.chat?.id !== forumChatId && !deletedMsg.from?.is_bot) {
+//             deleteMsg(forumChatId, deletedMsg);
+//         }
+//     }
+// });
 
 app.listen(PORT, ()=> console.log('server started on PORT ' + PORT))
 
