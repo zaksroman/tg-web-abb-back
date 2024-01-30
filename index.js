@@ -57,8 +57,10 @@ bot.on('message', async (msg) => {
     const userName = `${msg.from.first_name} ${msg.from.last_name}` || msg.from.username ||  `User_${userId}`;
 
     const userBD = msg.message_thread_id
-        ? await userDataModel.findOne({message_thread_id: msg.message_thread_id})
-        : await userDataModel.findOne({fromId: userId})
+        ? await userDataModel.findOne({message_thread_id: msg.message_thread_id}).catch((error) => {
+            console.error('Ошибка поиска userDataModel в MESSAGE', error)})
+        : await userDataModel.findOne({fromId: userId}).catch((error) => {
+            console.error('Ошибка поиска userDataModel в MESSAGE', error)})
 
     try {
         if (text === '/start') {
@@ -169,8 +171,12 @@ bot.on('edited_message', async (editedMsg) => {
         const userId = editedMsg.from.id;
 
         const userBD = editedMsg.message_thread_id
-            ? await userDataModel.findOne({message_thread_id: editedMsg.message_thread_id})
-            : await userDataModel.findOne({fromId: userId})
+            ? await userDataModel.findOne({message_thread_id: editedMsg.message_thread_id}).catch((error) => {
+                console.error('Ошибка поиска userDataModel в EDITMESSAGE', error)})
+            : await userDataModel.findOne({fromId: userId}).catch((error) => {
+                console.error('Ошибка поиска userDataModel в EDITMESSAGE', error)})
+
+        // console.log(editedMsg)
 
         const findPairToEdit = async (editedMsg) =>{
             return await userBD?.messages?.find(el => el.msg === editedMsg?.message_id).botMsg
@@ -198,17 +204,10 @@ bot.on('edited_message', async (editedMsg) => {
                             : editedMsg.animation ? 'animation'
                                 : editedMsg.audio ? 'audio'
                                     : null
-            console.log(mediaType)
 
-            const media = editedMsg[mediaType];
-            console.log(media)
-
-            const mediaParams = { type: mediaType, media: media };
-            console.log(mediaParams)
-
-            await bot.editMessageMedia(mediaParams, {
+            await bot.editMessageMedia({ type: mediaType, media: editedMsg[mediaType][0].file_id }, {
                 message_id: await findPairToEdit(editedMsg),
-                chatId: chatId
+                chat_id: chatId
             });
         }
 
@@ -245,7 +244,7 @@ bot.on('edited_message', async (editedMsg) => {
                     await editMessageCaption(editedMsg, forumChatId)
                 }
 
-                if (editedMsg?.media) {
+                if (editedMsg?.photo || editedMsg?.video || editedMsg?.animation || editedMsg?.audio || editedMsg?.document) {
                     await editMessageMedia(editedMsg, forumChatId)
                 }
             }
@@ -254,40 +253,6 @@ bot.on('edited_message', async (editedMsg) => {
         }
     }
 })
-
-// /////////DELETEMESSAGE/////////
-// bot.on('delete_message', (deletedMsg) => {
-//     if (!deletedMsg.from?.is_bot) {
-//         const userId = deletedMsg?.from.id;
-//
-//         const userBD = deletedMsg.message_thread_id
-//               ? await userDataModel.findOne({message_thread_id: deletedMsg.message_thread_id})
-//               : await userDataModel.findOne({fromId: userId})
-//
-//         console.log('удалено');
-//
-//         const findPairToDelete = async (deletedMsg) => {
-//             return await userBD?.messages?.find(el => el.msg === deletedMsg?.message_id).botMsg;
-//         };
-//
-//         const deleteMsg = (chat_id, deletedMsg) => {
-//             const messageIdToDelete = findPairToDelete(deletedMsg);
-//             if (messageIdToDelete) {
-//                 bot.deleteMessage(chat_id, messageIdToDelete).catch((e) => console.log(e));
-//             }
-//         };
-//
-//         ///admin delete///
-//         if (deletedMsg?.chat?.id === forumChatId && !!deletedMsg?.message_thread_id === true && !deletedMsg?.from?.is_bot) {
-//             deleteMsg(userBD?.chatId, deletedMsg);
-//         }
-//
-//         //user delete///
-//         if (deletedMsg.chat?.id !== forumChatId && !deletedMsg.from?.is_bot) {
-//             deleteMsg(forumChatId, deletedMsg);
-//         }
-//     }
-// });
 
 app.listen(PORT, ()=> console.log('server started on PORT ' + PORT))
 
