@@ -12,10 +12,16 @@ const forumChatId = -1002105194325
 const token = '6476733091:AAGjoUeCRXN8GIQT8jMwvZkxYaXfVsWUxUk';
 const webAppUrl = 'https://silly-bubblegum-7266f3.netlify.app'
 const db = 'mongodb://localhost:27017/learnBD'
+const getDataApi = '/api/getProducts'
+const postDataApi = '/api/postProduct'
+const delDataApi = '/api/delProduct/:_id'
+const editDataApi = '/api/editProduct'
 /////////////////
 
 const bot = new TelegramBot(token, {polling: true});
 
+
+////////BD//////
 mongoose
     .connect(db)
     .then(() => {
@@ -24,8 +30,7 @@ mongoose
     console.error('Ошибка подключения к MongoDB:', error);
 });
 
-const userDataSchema
-    = new Schema({
+const userDataSchema = new Schema({
     fromId: {
         type: Number,
         require: true
@@ -44,10 +49,80 @@ const userDataSchema
     },
 })
 
+const productSchema = new mongoose.Schema({
+    _id: String,
+    title: String,
+    description: String,
+    price: Number,
+    img: String,
+    createdAt: { type: Date, default: Date.now }
+});
+
 const userDataModel = mongoose.model('userDataModel', userDataSchema, 'pair_userbot_messages')
+const productModel = mongoose.model('productModel',productSchema, 'products')
 
 app.use(express.json())
 app.use(cors())
+
+
+///API///
+app.get(getDataApi, async (req, res) => {
+    try {
+        const products = await productModel.find().sort({ createdAt: -1 })
+        res.json(products)
+    } catch (e) {
+        res.status(500).json({ message: e.message });
+    }
+})
+
+app.post(postDataApi, async (req, res) => {
+    try {
+        const {_id, title, description, price, img} = req.body;
+
+        const newProduct = new productModel({
+            _id: _id,
+            title: title,
+            price: price,
+            description: description,
+            img: img
+        })
+
+        const savedProduct = await newProduct.save();
+
+        res.status(201).json(savedProduct)
+    } catch (e) {
+        res.status(400).json({ message: e.message })
+    }
+})
+
+app.delete(delDataApi, async (req, res) => {
+    try {
+        const deletedProduct = await productModel.findByIdAndDelete(req.params._id);
+        if (!deletedProduct) {
+            return res.status(404).json({ message: "Товар не найден" });
+        }
+        res.status(200).json({ message: "Товар успешно удален", deletedProduct });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+app.put(`${editDataApi}/:_id`, async (req, res) => {
+    try {
+        const updatedProperties = req.body; // Получаем обновленные свойства товара из тела запроса
+
+        const updatedProduct = await productModel.findOneAndUpdate(
+            { _id: req.params._id },
+            { $set: updatedProperties },
+            { new: true }
+        );
+
+        res.status(200).json({ message: 'Товар успешно обновлен', updatedProduct });
+    } catch (error) {
+        console.error('Ошибка при обновлении товара:', error);
+        res.status(500).json({ message: 'Внутренняя ошибка сервера' });
+    }
+});
 
 //////////MESSAGE///
 bot.on('message', async (msg) => {
