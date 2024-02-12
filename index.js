@@ -3,6 +3,8 @@ const express = require('express');
 const cors = require('cors');
 const app = express()
 const mongoose = require('mongoose');
+const multer  = require('multer');
+const fs = require("fs");
 const Schema = mongoose.Schema
 
 const PORT = 8000
@@ -10,60 +12,79 @@ const PORT = 8000
 /////variables////
 const forumChatId = -1002105194325
 const token = '6476733091:AAGjoUeCRXN8GIQT8jMwvZkxYaXfVsWUxUk';
-const webAppUrl = 'https://silly-bubblegum-7266f3.netlify.app'
-const db = 'mongodb://localhost:27017/learnBD'
+const webAppUrl =  'https://silly-bubblegum-7266f3.netlify.app' /*'https://tg-bot-test.ru/'*/
+const db = {
+    username: 'admin',
+    password: 'Rk1*48Kz',
+    host: 'calecija.beget.app',
+    database: 'admin'
+}/*'mongodb://localhost:27017/learnBD'*/
 const getDataApi = '/api/getProducts'
 const postDataApi = '/api/postProduct'
 const delDataApi = '/api/delProduct/:_id'
 const editDataApi = '/api/editProduct'
 /////////////////
+app.use(express.json())
+app.use(cors())
+app.use(express.urlencoded({ extended: true }));
+app.use('/uploads', express.static('uploads'));
 
+////////////
 const bot = new TelegramBot(token, {polling: true});
-
-
 ////////BD//////
+
 mongoose
-    .connect(db)
+    .connect(
+        `mongodb://${db.username}:${db.password}@${db.host}/${db.database}`,
+        { useNewUrlParser: true, useUnifiedTopology: true }
+    )
     .then(() => {
     console.log('Подключение к MongoDB успешно!');
 }).catch((error) => {
     console.error('Ошибка подключения к MongoDB:', error);
 });
 
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, 'uploads')
+    },
+    filename: function (req, file, cb) {
+        cb(null, `${Date.now()}` )
+    }
+})
+
+const upload = multer({ storage: storage })
+
 const userDataSchema = new Schema({
     fromId: {
         type: Number,
-        require: true
+        require: true,
     },
     chatId: {
         type: Number,
-        require: true
+        require: true,
     },
     message_thread_id: {
         type: Number,
-        require: true
+        require: true,
     },
     messages: {
         type: Array,
-        require: true
+        require: true,
     },
 })
 
-const productSchema = new mongoose.Schema({
-    _id: String,
+const productSchema = new Schema({
     title: String,
     description: String,
     price: Number,
-    img: String,
+    images: Array,
+    count: Number,
     createdAt: { type: Date, default: Date.now }
 });
 
 const userDataModel = mongoose.model('userDataModel', userDataSchema, 'pair_userbot_messages')
 const productModel = mongoose.model('productModel',productSchema, 'products')
-
-app.use(express.json())
-app.use(cors())
-
 
 ///API///
 app.get(getDataApi, async (req, res) => {
@@ -75,16 +96,16 @@ app.get(getDataApi, async (req, res) => {
     }
 })
 
-app.post(postDataApi, async (req, res) => {
+app.post(postDataApi, upload.array('images', 5), async (req, res) => {
     try {
-        const {_id, title, description, price, img} = req.body;
+        const {title, description, price} = req.body;
+        const images = req.files.map(file => file.filename);
 
         const newProduct = new productModel({
-            _id: _id,
             title: title,
             price: price,
             description: description,
-            img: img
+            images: images,
         })
 
         const savedProduct = await newProduct.save();
@@ -95,19 +116,26 @@ app.post(postDataApi, async (req, res) => {
     }
 })
 
-app.delete(delDataApi, async (req, res) => {
+app.delete(delDataApi,  async (req, res) => {
     try {
         const deletedProduct = await productModel.findByIdAndDelete(req.params._id);
+
         if (!deletedProduct) {
             return res.status(404).json({ message: "Товар не найден" });
         }
+        deletedProduct.images.forEach(image => {
+            const imagePath = `uploads/${image}`;
+            if (fs.existsSync(imagePath)) {
+                fs.unlinkSync(imagePath);
+            }
+        })
         res.status(200).json({ message: "Товар успешно удален", deletedProduct });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 });
 
-app.put(`${editDataApi}/:_id`, async (req, res) => {
+app.put(`${editDataApi}/:_id`, upload.array('images', 5),async (req, res) => {
     try {
         const updatedProperties = req.body; // Получаем обновленные свойства товара из тела запроса
 
@@ -127,7 +155,7 @@ app.put(`${editDataApi}/:_id`, async (req, res) => {
 //////////MESSAGE///
 bot.on('message', async (msg) => {
     const botChatId = msg.chat.id;
-    const text = msg.text
+    const text = msg.text;
     const userId = msg.from.id;
     const userName = `${msg.from.first_name} ${msg.from.last_name}` || msg.from.username ||  `User_${userId}`;
 
@@ -181,7 +209,7 @@ bot.on('message', async (msg) => {
         }
     } catch (error) {
         if (error.response && error.response.statusCode === 403) {
-            console.log(`Не удалось отправить сообщение. Пользователь заблокировал бота.`);
+            console.log(`Не удалось отправить сообщение. Пользователь заблокировал бота. User_ID:${userId}`);
         } else {
             console.error(error)
         }
