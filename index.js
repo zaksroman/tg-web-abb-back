@@ -12,7 +12,7 @@ const PORT = 8000
 /////variables////
 const forumChatId = -1002105194325
 const token = '6476733091:AAGjoUeCRXN8GIQT8jMwvZkxYaXfVsWUxUk';
-const webAppUrl =  'https://silly-bubblegum-7266f3.netlify.app' /*'https://tg-bot-test.ru/'*/
+const webAppUrl =  /*'https://silly-bubblegum-7266f3.netlify.app'*/ 'https://tg-bot-test.ru/'
 const db = {
     username: 'admin',
     password: 'Rk1*48Kz',
@@ -24,6 +24,7 @@ const postDataApi = '/api/postProduct'
 const delDataApi = '/api/delProduct/:_id'
 const editDataApi = '/api/editProduct'
 /////////////////
+
 app.use(express.json())
 app.use(cors())
 app.use(express.urlencoded({ extended: true }));
@@ -35,8 +36,7 @@ const bot = new TelegramBot(token, {polling: true});
 
 mongoose
     .connect(
-        `mongodb://${db.username}:${db.password}@${db.host}/${db.database}`,
-        { useNewUrlParser: true, useUnifiedTopology: true }
+        `mongodb://${db.username}:${db.password}@${db.host}/${db.database}`
     )
     .then(() => {
     console.log('Подключение к MongoDB успешно!');
@@ -258,7 +258,10 @@ bot.on('message', async (msg) => {
     if (msg?.web_app_data?.data) {
         try {
             const data = JSON.parse(msg?.web_app_data?.data)
-            await bot.sendMessage(botChatId, 'Список ваших покупочек TEST')
+            await bot.sendMessage(botChatId, 'Список ваших покупочек и информация по ним TEST')
+            await bot.sendMessage(forumChatId, '\u2757 Вся информация о заказе и пожеланиях клиента', {
+                message_thread_id: userBD.message_thread_id
+            })
 
             setTimeout(async ()=> {
                 await bot.sendMessage(botChatId,'Всю информацию вы получите в этом чате')
