@@ -12,7 +12,7 @@ const PORT = 8000
 /////variables////
 const forumChatId = -1002105194325
 const token = '6476733091:AAGjoUeCRXN8GIQT8jMwvZkxYaXfVsWUxUk';
-const webAppUrl =  /*'https://silly-bubblegum-7266f3.netlify.app'*/ 'https://tg-bot-test.ru/'
+const webAppUrl = 'https://tg-bot-test.ru/' /*'https://silly-bubblegum-7266f3.netlify.app'*/
 const db = {
     username: 'admin',
     password: 'Rk1*48Kz',
@@ -36,7 +36,8 @@ const bot = new TelegramBot(token, {polling: true});
 
 mongoose
     .connect(
-        `mongodb://${db.username}:${db.password}@${db.host}/${db.database}`
+        // `mongodb://${db.username}:${db.password}@${db.host}/${db.database}`
+        'mongodb://localhost:27017/learnBD'
     )
     .then(() => {
     console.log('Подключение к MongoDB успешно!');
@@ -80,6 +81,7 @@ const productSchema = new Schema({
     price: Number,
     images: Array,
     count: Number,
+    categoryOfProduct: String,
     createdAt: { type: Date, default: Date.now }
 });
 
@@ -98,14 +100,15 @@ app.get(getDataApi, async (req, res) => {
 
 app.post(postDataApi, upload.array('images', 5), async (req, res) => {
     try {
-        const {title, description, price} = req.body;
+        const {title, description, price, categoryOfProduct} = req.body;
         const images = req.files.map(file => file.filename);
 
         const newProduct = new productModel({
             title: title,
             price: price,
             description: description,
-            images: images,
+            categoryOfProduct: categoryOfProduct,
+            images: images
         })
 
         const savedProduct = await newProduct.save();
